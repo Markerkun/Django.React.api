@@ -17,16 +17,15 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class LoginSerializer(serializers.ModelSerializer):
-    username = serializers.CharField()
+    email = serializers.CharField()
     password = serializers.CharField(write_only=True)
 
     class Meta:
         model = CustomUser
         fields = [
-            'username',
+            'email',
             'password',
         ]
-    
 
 class RegistrationSerializer(serializers.ModelSerializer):
     username = serializers.CharField()
@@ -45,6 +44,3 @@ class RegistrationSerializer(serializers.ModelSerializer):
         if attrs['password'] != attrs['confirm_password']:
             raise serializers.ValidationError({"confirm_password": "Паролі не збігаються."})
         return attrs
-    
-
-

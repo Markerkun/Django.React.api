@@ -3,6 +3,7 @@ import random
 from django.db.migrations import serializer
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from .models import CustomUser
@@ -11,7 +12,7 @@ from .serializers import LoginSerializer, UserSerializer, RegistrationSerializer
 from .utils import save_custom_image
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework import parsers
+
 
 FIRST_NAMES = ["Alice", "Bob", "Charlie", "Diana", "Eve", "Frank"]
 LAST_NAMES = ["Smith", "Johnson", "Brown", "Taylor", "Anderson", "Lee"]
@@ -47,7 +48,20 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = CustomUser.objects.all()
     serializer_class = UserSerializer
     parser_classes = [MultiPartParser, FormParser]
-    
+
+    def get_permissions(self):
+        if self.action in ['login', 'registration']:
+            permission_classes = [AllowAny]
+        elif self.action in ['list', 'retrieve']:
+            # тільки авторизовані користувачі можуть бачити список/деталі
+            permission_classes = [IsAuthenticated]
+            # або, якщо хочете взагалі заборонити GET списку всім:
+            # permission_classes = [IsAdminUser]
+        else:
+            permission_classes = [IsAuthenticated]
+        return [permission() for permission in permission_classes]
+
+
     @action(detail=False, methods=['post'])
     def generate(self, request):
         users = generate_random_users(5)
@@ -59,9 +73,10 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
     def login(self, request):
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
-            username = serializer.validated_data['username']
+            email = serializer.validated_data['email']
             password = serializer.validated_data['password']
-            user = CustomUser.objects.filter(username=username)
+            print("User Data", email, password)
+            user = CustomUser.objects.filter(email=email)
             user = user.first()
             if not user:
                 return Response({"detail": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
@@ -80,7 +95,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
                 return Response({"detail" : "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+
     @action(detail=False, methods=['post'], url_path='registration', serializer_class=RegistrationSerializer, parser_classes=[MultiPartParser, FormParser])
     def registration(self, request):
         serializer = self.get_serializer(data=request.data)
@@ -88,7 +103,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
             username = serializer.validated_data['username']
             if CustomUser.objects.filter(username=username).exists():
                 return Response(
-                    {"error": "Користувач з таким нікнеймом вже існує."}, 
+                    {"error": "Користувач з таким нікнеймом вже існує."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
             user = CustomUser.objects.create_user(
@@ -104,7 +119,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
                 user.image_medium = save_custom_image(uploaded_image, size=(800, 800), folder='medium')
                 user.image_large = save_custom_image(uploaded_image, size=(1200, 1200), folder='large')
 
-            refresh = RefreshToken.for_user(user)            
+            refresh = RefreshToken.for_user(user)
             user.save()
             return Response({
                 "message": "Користувача успішно створено",
